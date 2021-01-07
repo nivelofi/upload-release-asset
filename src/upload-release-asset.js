@@ -1,6 +1,8 @@
 const core = require('@actions/core');
 const { GitHub } = require('@actions/github');
 const fs = require('fs');
+const path = require('path');
+const glob = require('glob');
 
 async function run() {
   try {
@@ -18,6 +20,47 @@ async function run() {
 
     // Setup headers for API call, see Octokit Documentation: https://octokit.github.io/rest.js/#octokit-routes-repos-upload-release-asset for more information
     const headers = { 'content-type': assetContentType, 'content-length': contentLength(assetPath) };
+
+    // If we have a glob pattern then get the files matching the pattern and upload each
+    // matched file with the base name as the asset name.
+    if (assetPath.includes('*')) {
+      /**
+       * @type {string[]}
+       */
+      const files = await new Promise((resolve, reject) => {
+        glob(assetPath, (error, files) => {
+          if (error) {
+            return reject(error)
+          }
+          return resolve(files)
+        });
+      });
+      /**
+       * @type {string[]}
+       */
+      const downloadUrls = [];
+      // Iterate and upload each file.
+      const uploadPromises = files.map(async (file) => {
+        const assetName = path.basename(file);
+        const uploadAssetResponse = await github.repos.uploadReleaseAsset({
+          url: uploadUrl,
+          headers,
+          name: assetName,
+          file: fs.readFileSync(file)
+        });
+        const {
+          data: { browser_download_url: browserDownloadUrl }
+        } = uploadAssetResponse
+        downloadUrls.push(browserDownloadUrl)
+      });
+      // Wait for all the uploads to finish.
+      await Promise.all(uploadPromises);
+      const uploadedPaths = downloadUrls.join(';');
+      core.setOutput('browser_download_url', uploadedPaths);
+      return
+    }
+
+    // If the path does not have a glob pattern then just upload a single asset as usual.
 
     // Upload a release asset
     // API Documentation: https://developer.github.com/v3/repos/releases/#upload-a-release-asset
