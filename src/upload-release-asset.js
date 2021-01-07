@@ -18,9 +18,6 @@ async function run() {
     // Determine content-length for header to upload asset
     const contentLength = filePath => fs.statSync(filePath).size;
 
-    // Setup headers for API call, see Octokit Documentation: https://octokit.github.io/rest.js/#octokit-routes-repos-upload-release-asset for more information
-    const headers = { 'content-type': assetContentType, 'content-length': contentLength(assetPath) };
-
     // If we have a glob pattern then get the files matching the pattern and upload each
     // matched file with the base name as the asset name.
     if (assetPath.includes('*')) {
@@ -42,6 +39,7 @@ async function run() {
       // Iterate and upload each file.
       const uploadPromises = files.map(async (file) => {
         const assetName = path.basename(file);
+        const headers = { 'content-type': assetContentType, 'content-length': contentLength(file) };
         const uploadAssetResponse = await github.repos.uploadReleaseAsset({
           url: uploadUrl,
           headers,
@@ -61,6 +59,9 @@ async function run() {
     }
 
     // If the path does not have a glob pattern then just upload a single asset as usual.
+
+    // Setup headers for API call, see Octokit Documentation: https://octokit.github.io/rest.js/#octokit-routes-repos-upload-release-asset for more information
+    const headers = { 'content-type': assetContentType, 'content-length': contentLength(assetPath) };
 
     // Upload a release asset
     // API Documentation: https://developer.github.com/v3/repos/releases/#upload-a-release-asset
